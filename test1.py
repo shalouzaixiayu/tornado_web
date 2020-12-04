@@ -6,11 +6,14 @@
 """
 关于 tornado 的练习课程
 """
+from typing import Optional, Awaitable, Union, Any
 
 import tornado.web
 import tornado.ioloop
 import os
 import time
+import pymysql
+from sss import pwd
 
 FILE_PATH = 'file/'
 
@@ -40,7 +43,7 @@ class IndexHandler(tornado.web.RequestHandler):
 
 class LoginHandler(tornado.web.RequestHandler):
     """
-    用来限制 ip 登陆
+    用来限制 ip 登陆 和 useragent 的登陆限制
     """
 
     ug_list = [
@@ -70,11 +73,45 @@ class LoginHandler(tornado.web.RequestHandler):
             pass
 
 
+def _ConnectDB():
+    return pymysql.connect(user="root", host="127.0.0.1", db="tornado", passwd=pwd,
+                           port=3306)
+
+
+class SaveToMysql(tornado.web.RequestHandler):
+    # 用来绑定数据库， 进行数据库的字段提交
+    def initialize(self, db):
+        self.db = db
+
+    def get(self):
+        return self.render("templates/reginster.html")
+
+    def prepare(self) -> Optional[Awaitable[None]]:
+        return super().prepare()
+
+    def write_error(self, status_code: int, **kwargs: Any) -> None:
+        super().write_error(status_code, **kwargs)
+
+    def post(self):
+        name = self.get_argument("username")
+        age = self.get_argument("age")
+        try:
+            cursor = self.db.cursor()
+            cursor.execute(f"insert into t_username values(0 ,'{name}', '{age}', now());")
+            self.db.commit()
+            self.redirect("http://www.baidu.com")
+        except Exception as e:
+            self.db.rollback()
+            self.redirect('/reginster.html')
+
+
 if __name__ == '__main__':
+    setting = {"debug": True}
     app = tornado.web.Application([
         (r"/", IndexHandler),
         (r"/login.html", LoginHandler),
-    ])
+        (r'/reginster.html', SaveToMysql, {"db": _ConnectDB()}),
+    ], **setting)
     # 绑定一个监听端口
     app.listen(8888)
     # 启动web程序， 开始监听端口连接
